@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Label Inspect · AQUASHIELD</title>
+    <meta name="description" content="Auditoría automática de etiquetas de exportación - AQUASHIELD">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+    <script src="lib/tesseract.min.js"></script>
+</head>
+<body>
+<div id="file-protocol-warning" style="display:none;background:#ff6b35;color:#fff;text-align:center;padding:10px 16px;font-weight:600;font-size:14px;">
+  &#9888; Abre la app usando <strong>"Abrir Label Inspect.bat"</strong> para que el OCR funcione.
+</div>
+<script>if(location.protocol==='file:')document.getElementById('file-protocol-warning').style.display='block';</script>
+
+    <header class="header-block">
+        <div class="header-inner">
+            <div class="header-icon">🚢</div>
+            <div>
+                <h1>AQUASHIELD · Label Inspect</h1>
+                <p>Auditoría Automática de Etiquetas de Exportación</p>
+            </div>
+            <div class="header-actions">
+                <button class="btn-historial" id="btn-historial">📊 Historial</button>
+                <button class="btn-cerebro" id="btn-cerebro">🧠 Cerebro</button>
+                <button class="btn-nueva" id="btn-nueva" style="display:none;">🔄 Nueva Auditoría</button>
+            </div>
+        </div>
+    </header>
+
+    <main class="container">
+        <section class="upload-section" id="upload-section">
+            <div class="dropzone-single" id="dropzone-all">
+                <div class="dropzone-icon">📂</div>
+                <div class="dropzone-title">Arrastra todos los archivos aquí</div>
+                <div class="dropzone-hint">RDD (.xlsx) + Evidencias (PDF, Word, Excel) — se detectan automáticamente</div>
+                <div class="dropzone-hint shortcut-hint">💡 Ctrl + Enter para ejecutar</div>
+                <div class="dropzone-file" id="all-filenames"></div>
+                <input type="file" id="input-all" accept=".xlsx,.xls,.csv,.pdf,.docx" multiple hidden>
+            </div>
+            <button class="btn-primary" id="btn-auditar" disabled>
+                <span class="btn-icon">🚀</span> Ejecutar Auditoría
+            </button>
+        </section>
+
+        <div class="progress-bar-container" id="progress-container" style="display:none;">
+            <div class="progress-label" id="progress-label">Procesando…</div>
+            <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+        </div>
+
+        <section class="results-section" id="results-section" style="display:none;">
+            <div class="pedido-card" id="pedido-card"></div>
+            <div class="metrics-grid" id="metrics-grid"></div>
+            <div class="success-banner" id="success-banner" style="display:none;">
+                🎉 ¡Auditoría perfecta! El 100% de las etiquetas fue verificado.
+            </div>
+            <div id="planta-summary" class="planta-summary"></div>
+            <div id="evidence-breakdown" class="evidence-breakdown"></div>
+
+            <div class="toolbar">
+                <div class="search-box">
+                    <span class="search-icon">🔍</span>
+                    <input type="text" id="search-input" placeholder="Buscar lote, planta o descripción…" autocomplete="off">
+                </div>
+                <div class="toolbar-actions">
+                    <button class="btn-tool" id="btn-copiar">📋 Copiar Faltantes</button>
+                    <button class="btn-tool" id="btn-email">✉️ Borrador Correo</button>
+                </div>
+            </div>
+
+            <div class="tabs-container">
+                <div class="tabs-header">
+                    <button class="tab-btn active" data-tab="faltantes" id="tab-btn-faltantes">🔴 Faltantes</button>
+                    <button class="tab-btn" data-tab="verificados" id="tab-btn-verificados">✅ Verificados</button>
+                </div>
+                <div class="tab-content active" id="tab-faltantes">
+                    <table class="audit-table sub-table"><thead id="thead-faltantes"></thead><tbody id="tbody-faltantes"></tbody></table>
+                </div>
+                <div class="tab-content" id="tab-verificados">
+                    <table class="audit-table sub-table"><thead id="thead-verificados"></thead><tbody id="tbody-verificados"></tbody></table>
+                </div>
+            </div>
+
+            <div class="download-section">
+                <h3>📥 Descargar Informe</h3>
+                <button class="btn-download" id="btn-download">⬇️ Descargar Excel (RDD Corregido + Auditoría + Faltantes)</button>
+            </div>
+        </section>
+    </main>
+
+    <!-- Cerebro Modal -->
+    <div class="modal-overlay" id="cerebro-modal" style="display:none;">
+        <div class="modal-box modal-cerebro">
+            <h3>🧠 Cerebro — Directorio de Plantas</h3>
+            <p class="modal-desc">Asocia cada SERNAP con el nombre correcto de planta.</p>
+            <div class="cerebro-add">
+                <input type="text" id="cerebro-sernap" placeholder="SERNAP (ej: 10636)" class="cerebro-input">
+                <input type="text" id="cerebro-planta" placeholder="Nombre correcto de planta" class="cerebro-input cerebro-input-wide">
+                <button class="btn-tool btn-cerebro-add" id="cerebro-btn-add">➕ Agregar</button>
+            </div>
+            <div class="cerebro-list" id="cerebro-list"></div>
+            <div class="modal-actions">
+                <button class="btn-modal-close" id="cerebro-export">💾 Exportar</button>
+                <label class="btn-modal-close cerebro-import-label">📂 Importar<input type="file" id="cerebro-import" accept=".json" hidden></label>
+                <button class="btn-modal-copy" id="cerebro-close">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Historial Modal -->
+    <div class="modal-overlay" id="historial-modal" style="display:none;">
+        <div class="modal-box modal-historial">
+            <h3>📊 Historial de Auditorías</h3>
+            <p class="modal-desc">Resumen de las últimas auditorías ejecutadas desde este equipo.</p>
+            <div id="historial-list" class="historial-list"></div>
+            <div class="modal-actions">
+                <button class="btn-modal-close" id="historial-clear">🗑️ Limpiar</button>
+                <button class="btn-modal-copy" id="historial-close">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <span>AQUASHIELD · Label Inspect v3.1</span>
+        <span class="footer-shortcuts">⌨️ Ctrl+Enter = Auditar · Esc = Cerrar</span>
+    </footer>
+
+    <script src="app.js"></script>
+</body>
+</html>

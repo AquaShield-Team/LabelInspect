@@ -1,0 +1,35 @@
+# ── Python legacy (ya no se usa, la app es 100% web) ──
+app.py
+main.py
+src/
+requirements.txt
+__pycache__/
+*.pyc
+venv/
+.env
+
+# ── Archivos de datos / pruebas ──
+data/
+*.xlsx
+*.xls
+*.csv
+*.pdf
+
+# ── Previews de debug ──
+preview_*.png
+
+# ── Archivos temporales ──
+t.xlsx
+*.tmp
+*.log
+*.bak
+audit_code.*
+
+# ── OS ──
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# ── IDE ──
+.vscode/
+.idea/
