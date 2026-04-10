@@ -1030,3 +1030,44 @@ html { scroll-behavior: smooth; }
     .success-banner { background: #e8f5e9; color: #2e7d32; border-color: #2e7d32; }
     .modal-overlay { display: none !important; }
 }
+
+/* -- Mode Tabs -------------------------------------------------- */
+.mode-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 24px;
+    background: var(--bg-card);
+    border-radius: var(--radius);
+    padding: 4px;
+    border: 1px solid var(--border);
+}
+
+.mode-tab {
+    flex: 1;
+    padding: 12px 20px;
+    background: transparent;
+    color: var(--text-muted);
+    border: none;
+    border-radius: var(--radius-sm);
+    font-family: inherit;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.mode-tab:hover { color: var(--text-secondary); background: rgba(59,130,246,0.05); }
+
+.mode-tab.active {
+    background: linear-gradient(135deg, rgba(59,130,246,0.15), rgba(59,130,246,0.08));
+    color: var(--text-primary);
+    border: 1px solid rgba(59,130,246,0.3);
+}
+
+.btn-rdd-action {
+    background: linear-gradient(135deg, #7c3aed, #5b21b6) !important;
+}
+
+.btn-rdd-action:hover:not(:disabled) {
+    box-shadow: 0 8px 24px rgba(124, 58, 237, 0.4) !important;
+}

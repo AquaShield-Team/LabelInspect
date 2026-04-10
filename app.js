@@ -43,7 +43,7 @@ document.getElementById('login-password').addEventListener('keydown', (e) => {
 });
 
 /**
- * AQUASHIELD · Label Inspect v3.1
+ * AQUASHIELD · Label Inspect v3.2
  * Motor de auditoría 100% client-side
  * Dropzone único · Cerebro SERNAP→Planta · Historial · Validación de fechas
  */
@@ -145,6 +145,102 @@ function classifyFiles(fileList) {
     dropAll.classList.add('file-loaded');
     btnAuditar.disabled = !rddFile;
 }
+
+// ── Mode Tabs ─────────────────────────────────────────────────────────────────
+document.querySelectorAll('.mode-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+        document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        const mode = tab.dataset.mode;
+        document.getElementById('upload-section').style.display = mode === 'audit' ? '' : 'none';
+        document.getElementById('rdd-section').style.display = mode === 'rdd' ? '' : 'none';
+        document.getElementById('results-section').style.display = 'none';
+    });
+});
+
+// ── RDD-only Dropzone ─────────────────────────────────────────────────────────
+let rddOnlyFile = null;
+const dropRdd = document.getElementById('dropzone-rdd');
+const inputRdd = document.getElementById('input-rdd');
+const rddFilenameEl = document.getElementById('rdd-filename');
+const btnCorregir = document.getElementById('btn-corregir');
+
+['dragenter', 'dragover'].forEach(e =>
+    dropRdd.addEventListener(e, ev => { ev.preventDefault(); dropRdd.classList.add('drag-over'); }));
+['dragleave', 'drop'].forEach(e =>
+    dropRdd.addEventListener(e, ev => { ev.preventDefault(); dropRdd.classList.remove('drag-over'); }));
+
+dropRdd.addEventListener('drop', ev => handleRddOnly(ev.dataTransfer.files));
+dropRdd.addEventListener('click', () => inputRdd.click());
+inputRdd.addEventListener('change', () => handleRddOnly(inputRdd.files));
+
+function handleRddOnly(fileList) {
+    const files = Array.from(fileList);
+    const excel = files.find(f => {
+        const n = f.name.toLowerCase();
+        return n.endsWith('.xlsx') || n.endsWith('.xls');
+    });
+    if (!excel) return;
+    rddOnlyFile = excel;
+    rddFilenameEl.innerHTML = '<strong>' + excel.name + '</strong>';
+    dropRdd.classList.add('file-loaded');
+    btnCorregir.disabled = false;
+}
+
+btnCorregir.addEventListener('click', async () => {
+    if (!rddOnlyFile) return;
+    progressCont.style.display = 'block';
+    setProgress('Leyendo RDD...', 20);
+    try {
+        const data = await readFileAsArrayBuffer(rddOnlyFile);
+        const workbook = XLSX.read(data, { type: 'array', cellDates: true });
+        const cerebro = getCerebro();
+        const pedido = (rddOnlyFile.name.match(/\d{6,}/) || ['RDD'])[0];
+        
+        setProgress('Aplicando correcciones del Cerebro...', 50);
+        const wb = XLSX.utils.book_new();
+
+        // Hoja 1: Tabla resumen
+        const tablaSheet = buildTablaFromWorkbook(workbook, cerebro);
+        XLSX.utils.book_append_sheet(wb, tablaSheet, 'Tabla');
+
+        // Hoja 2: RDD Corregido (Sheet1 / hoja con mas datos)
+        let dataSheetName = workbook.SheetNames.find(n => n.toLowerCase() !== 'hoja1') || workbook.SheetNames[0];
+        const wsCopy = workbook.Sheets[dataSheetName];
+        const allRows = XLSX.utils.sheet_to_json(wsCopy, { header: 1, defval: null, raw: false });
+        
+        // Find planta/sernap columns in data sheet
+        let headerRowIdx = 0;
+        for (let i = 0; i < Math.min(10, allRows.length); i++) {
+            const row = allRows[i];
+            if (row && row.some(c => String(c || '').toLowerCase().includes('planta'))) { headerRowIdx = i; break; }
+        }
+        const headers = allRows[headerRowIdx] ? allRows[headerRowIdx].map(h => String(h || '').trim().toLowerCase()) : [];
+        const pIdx = headers.findIndex(h => h.includes('planta') || h.includes('centro'));
+        const sIdx = headers.findIndex(h => h.includes('sernap'));
+        
+        if (pIdx >= 0 && sIdx >= 0 && Object.keys(cerebro).length > 0) {
+            let lastS = '';
+            for (let i = headerRowIdx + 1; i < allRows.length; i++) {
+                const row = allRows[i];
+                if (!row) continue;
+                const rawS = row[sIdx];
+                if (rawS != null && String(rawS).trim()) lastS = String(rawS).replace(/\.0+$/, '').trim();
+                if (lastS && cerebro[lastS]) row[pIdx] = cerebro[lastS];
+            }
+        }
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(allRows), 'RDD Corregido');
+
+        setProgress('Generando Excel...', 90);
+        XLSX.writeFile(wb, 'RDD_Corregido_' + pedido + '.xlsx');
+        setProgress('¡Descarga lista!', 100);
+        setTimeout(() => { progressCont.style.display = 'none'; }, 1500);
+    } catch (err) {
+        console.error(err);
+        setProgress('Error: ' + err.message, 0);
+    }
+});
+
 
 // ── Main trigger ──────────────────────────────────────────────────────────────
 btnAuditar.addEventListener('click', async () => {
@@ -662,6 +758,148 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
+
+// ── Build Tabla Sheet (pivot-style from Hoja1 of RDD) ─────────────────────────
+function buildTablaFromWorkbook(workbook, cerebro) {
+    // Find the summary sheet (Hoja1) - the one with "Pedido de Ventas"
+    let summarySheetName = null;
+    let dataSheetName = null;
+    
+    for (const sn of workbook.SheetNames) {
+        const ws = workbook.Sheets[sn];
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: false });
+        if (rows.length > 0 && rows[0] && String(rows[0][0] || '').toLowerCase().includes('pedido')) {
+            summarySheetName = sn;
+        } else if (rows.length > 100) {
+            dataSheetName = sn;
+        }
+    }
+
+    // If we found the summary sheet, use its structure
+    if (summarySheetName) {
+        const ws = workbook.Sheets[summarySheetName];
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: false });
+        
+        // Apply cerebro corrections
+        // Find header row
+        let headerRow = -1;
+        for (let i = 0; i < Math.min(10, rows.length); i++) {
+            if (rows[i] && rows[i].some(c => String(c || '').toLowerCase().includes('planta'))) {
+                headerRow = i;
+                break;
+            }
+        }
+        
+        if (headerRow >= 0) {
+            const hdrs = rows[headerRow].map(h => String(h || '').trim().toLowerCase());
+            const pIdx = hdrs.findIndex(h => h.includes('planta') && !h.includes('sernap'));
+            const sIdx = hdrs.findIndex(h => h.includes('sernap'));
+            
+            if (pIdx >= 0 && sIdx >= 0 && Object.keys(cerebro).length > 0) {
+                let lastS = '';
+                for (let i = headerRow + 1; i < rows.length; i++) {
+                    const row = rows[i];
+                    if (!row) continue;
+                    // Skip total row
+                    if (String(row[0] || '').toLowerCase().includes('total')) continue;
+                    const rawS = row[sIdx];
+                    if (rawS != null && String(rawS).trim()) lastS = String(rawS).replace(/\.0+$/, '').trim();
+                    if (lastS && cerebro[lastS]) row[pIdx] = cerebro[lastS];
+                }
+            }
+        }
+        
+        return XLSX.utils.aoa_to_sheet(rows);
+    }
+
+    // Fallback: build tabla from data sheet
+    if (!dataSheetName) dataSheetName = workbook.SheetNames[0];
+    return buildTablaFromDataSheet(workbook.Sheets[dataSheetName], cerebro);
+}
+
+function buildTablaFromDataSheet(ws, cerebro) {
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: false });
+    
+    // Detect headers
+    let headerRow = 0;
+    for (let i = 0; i < Math.min(10, rows.length); i++) {
+        if (rows[i] && rows[i].some(c => String(c || '').toLowerCase().includes('planta'))) {
+            headerRow = i; break;
+        }
+    }
+    const headers = rows[headerRow] ? rows[headerRow].map(h => String(h || '').trim().toLowerCase()) : [];
+    const pIdx = headers.findIndex(h => h.includes('planta') || h.includes('centro'));
+    const sIdx = headers.findIndex(h => h.includes('sernap'));
+    const dIdx = headers.findIndex(h => h.includes('descripci'));
+    const lIdx = headers.findIndex(h => h.includes('productivo') || h.includes('tracecode') || h.includes('lote'));
+    const fIdx = headers.findIndex(h => h.includes('fecha') && h.includes('proceso'));
+    const cIdx = headers.findIndex(h => h.includes('caducidad') || h.includes('vencimiento'));
+    const cajIdx = headers.findIndex(h => h.includes('caja'));
+    const knIdx = headers.findIndex(h => h.includes('neto'));
+    const kbIdx = headers.findIndex(h => h.includes('bruto'));
+
+    // Build grouped data: Planta -> Desc -> Lotes
+    const groups = {};
+    let lastP = '', lastS = '', lastD = '';
+    
+    for (let i = headerRow + 1; i < rows.length; i++) {
+        const row = rows[i];
+        if (!row) continue;
+        const lote = lIdx >= 0 ? String(row[lIdx] || '').trim().replace(/\.0+$/, '') : '';
+        if (!lote || !/^\d+/.test(lote)) continue;
+        if (String(row[0] || '').toLowerCase().includes('total')) continue;
+
+        if (pIdx >= 0 && row[pIdx] && String(row[pIdx]).trim()) lastP = String(row[pIdx]).trim();
+        if (sIdx >= 0 && row[sIdx] && String(row[sIdx]).trim()) lastS = String(row[sIdx]).replace(/\.0+$/, '').trim();
+        if (dIdx >= 0 && row[dIdx] && String(row[dIdx]).trim()) lastD = String(row[dIdx]).trim();
+
+        let plantaFinal = lastP;
+        if (lastS && cerebro[lastS]) plantaFinal = cerebro[lastS];
+
+        const key = lastS + '|' + lastD;
+        if (!groups[key]) groups[key] = { planta: plantaFinal, sernap: lastS, desc: lastD, lotes: [] };
+        groups[key].lotes.push({
+            lote: lote,
+            fecha: fIdx >= 0 ? String(row[fIdx] || '') : '',
+            caducidad: cIdx >= 0 ? String(row[cIdx] || '') : '',
+            cajas: cajIdx >= 0 ? Number(row[cajIdx]) || 0 : 0,
+            kgNeto: knIdx >= 0 ? Number(row[knIdx]) || 0 : 0,
+            kgBruto: kbIdx >= 0 ? Number(row[kbIdx]) || 0 : 0
+        });
+    }
+
+    // Build AOA
+    const aoa = [];
+    aoa.push(['Pedido de Ventas', '', '', '', '', '', '', '', '']);
+    aoa.push(['Nombre del Cliente', '', '', '', '', '', '', '', '']);
+    aoa.push([]);
+    aoa.push(['', '', '', '', '', '', 'Valores', '', '']);
+    aoa.push(['Planta Elaboradora', 'SERNAP Planta Elaboradora', 'Descripción', 'L.Productivo/TraceCode', 'Fecha de proceso', 'Fecha Caducidad', 'Suma de Cantidad de Cajas', 'Suma de Kilos Netos', 'Suma de Kilos Brutos']);
+    
+    let totalCajas = 0, totalKN = 0, totalKB = 0;
+    let isFirstPlanta = true;
+    let prevPlanta = '';
+
+    for (const g of Object.values(groups)) {
+        let isFirstInGroup = true;
+        for (const l of g.lotes) {
+            const plantaCell = (g.planta !== prevPlanta) ? g.planta : '';
+            const sernapCell = (g.planta !== prevPlanta) ? g.sernap : '';
+            const descCell = isFirstInGroup ? g.desc : '';
+            
+            aoa.push([plantaCell, sernapCell, descCell, l.lote, l.fecha, l.caducidad, l.cajas, l.kgNeto, Math.round(l.kgBruto * 1000) / 1000]);
+            totalCajas += l.cajas;
+            totalKN += l.kgNeto;
+            totalKB += l.kgBruto;
+            isFirstInGroup = false;
+            prevPlanta = g.planta;
+        }
+    }
+
+    aoa.push(['Total general', '', '', '', '', '', totalCajas, totalKN, Math.round(totalKB * 1000) / 1000]);
+    return XLSX.utils.aoa_to_sheet(aoa);
+}
+
 // 5. DOWNLOADS
 // ═════════════════════════════════════════════════════════════════════════════
 
@@ -670,6 +908,12 @@ document.getElementById('btn-download').addEventListener('click', () => {
     if (!auditResults.length) return;
     const pedido = (rddFile.name.match(/\d{6,}/) || ['Pedido'])[0];
     const wb = XLSX.utils.book_new();
+
+    // ── Hoja 0: Tabla resumen ─────────────────────────────────────────────
+    if (originalWorkbook) {
+        const tablaSheet = buildTablaFromWorkbook(originalWorkbook, getCerebro());
+        XLSX.utils.book_append_sheet(wb, tablaSheet, 'Tabla');
+    }
 
     // ── Hoja 1: RDD Corregido ──────────────────────────────────────────────
     if (originalWorkbook) {

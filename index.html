@@ -30,7 +30,7 @@
     </div>
 </div>
 
-<!-- APP (oculta hasta autenticarse) -->
+<!-- APP -->
 <div id="app-container" style="display:none;">
 
 <div id="file-protocol-warning" style="display:none;background:#ff6b35;color:#fff;text-align:center;padding:10px 16px;font-weight:600;font-size:14px;">
@@ -54,6 +54,13 @@
     </header>
 
     <main class="container">
+        <!-- ═══ MODE TABS ═══ -->
+        <div class="mode-tabs" id="mode-tabs">
+            <button class="mode-tab active" data-mode="audit" id="mode-audit">🔍 Auditoría de Etiquetas</button>
+            <button class="mode-tab" data-mode="rdd" id="mode-rdd">📋 Corregir RDD</button>
+        </div>
+
+        <!-- ═══ MODE 1: AUDITORÍA ═══ -->
         <section class="upload-section" id="upload-section">
             <div class="dropzone-single" id="dropzone-all">
                 <div class="dropzone-icon">📂</div>
@@ -65,6 +72,20 @@
             </div>
             <button class="btn-primary" id="btn-auditar" disabled>
                 <span class="btn-icon">🚀</span> Ejecutar Auditoría
+            </button>
+        </section>
+
+        <!-- ═══ MODE 2: CORREGIR RDD ═══ -->
+        <section class="upload-section" id="rdd-section" style="display:none;">
+            <div class="dropzone-single" id="dropzone-rdd">
+                <div class="dropzone-icon">📋</div>
+                <div class="dropzone-title">Arrastra el archivo RDD aquí</div>
+                <div class="dropzone-hint">Solo el archivo RDD (.xlsx) — se corregirá con el Cerebro y se generará la tabla</div>
+                <div class="dropzone-file" id="rdd-filename"></div>
+                <input type="file" id="input-rdd" accept=".xlsx,.xls" hidden>
+            </div>
+            <button class="btn-primary btn-rdd-action" id="btn-corregir" disabled>
+                <span class="btn-icon">📥</span> Corregir y Descargar
             </button>
         </section>
 
@@ -108,7 +129,7 @@
 
             <div class="download-section">
                 <h3>📥 Descargar Informe</h3>
-                <button class="btn-download" id="btn-download">⬇️ Descargar Excel (RDD Corregido + Auditoría + Faltantes)</button>
+                <button class="btn-download" id="btn-download">⬇️ Descargar Excel (Tabla + RDD Corregido + Auditoría + Faltantes)</button>
             </div>
         </section>
     </main>
@@ -148,7 +169,7 @@
 </div>
 
     <footer class="footer">
-        <span>AQUASHIELD · Label Inspect v3.1</span>
+        <span>AQUASHIELD · Label Inspect v3.2</span>
         <span class="footer-shortcuts">⌨️ Ctrl+Enter = Auditar · Esc = Cerrar</span>
     </footer>
 
