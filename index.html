@@ -14,6 +14,25 @@
     <script src="lib/tesseract.min.js"></script>
 </head>
 <body>
+
+<!-- LOGIN GATE -->
+<div id="login-gate" class="login-gate">
+    <div class="login-box">
+        <div class="login-icon">🚢</div>
+        <h1 class="login-title">AQUASHIELD</h1>
+        <p class="login-subtitle">Label Inspect · Acceso Interno</p>
+        <div class="login-form">
+            <input type="password" id="login-password" class="login-input" placeholder="Ingresa la clave de acceso" autocomplete="off">
+            <button id="login-btn" class="login-btn">🔓 Ingresar</button>
+        </div>
+        <p id="login-error" class="login-error" style="display:none">❌ Clave incorrecta</p>
+        <p class="login-footer">Solicita la clave al administrador del equipo</p>
+    </div>
+</div>
+
+<!-- APP (oculta hasta autenticarse) -->
+<div id="app-container" style="display:none;">
+
 <div id="file-protocol-warning" style="display:none;background:#ff6b35;color:#fff;text-align:center;padding:10px 16px;font-weight:600;font-size:14px;">
   &#9888; Abre la app usando <strong>"Abrir Label Inspect.bat"</strong> para que el OCR funcione.
 </div>
@@ -125,6 +144,8 @@
             </div>
         </div>
     </div>
+
+</div>
 
     <footer class="footer">
         <span>AQUASHIELD · Label Inspect v3.1</span>

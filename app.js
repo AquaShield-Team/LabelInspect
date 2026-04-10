@@ -1,3 +1,47 @@
+// ===============================================================
+// 0. LOGIN GATE — Acceso con clave compartida
+// ===============================================================
+
+const ACCESS_HASH = '6b5d1e4a7c8f2e3d9a0b4c5f8e7d6c3b2a1f0e9d8c7b6a5f4e3d2c1b0a9f8e7';
+
+async function hashPassword(password) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(password + '_aquashield_salt_2026');
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Pre-compute the correct hash on first load
+let CORRECT_HASH = '';
+(async () => {
+    CORRECT_HASH = await hashPassword('aquashield2026');
+})();
+
+// Check if already authenticated
+if (localStorage.getItem('aquashield_auth') === 'true') {
+    document.getElementById('login-gate').style.display = 'none';
+    document.getElementById('app-container').style.display = 'block';
+}
+
+document.getElementById('login-btn').addEventListener('click', async () => {
+    const pwd = document.getElementById('login-password').value;
+    const hash = await hashPassword(pwd);
+    if (hash === CORRECT_HASH) {
+        localStorage.setItem('aquashield_auth', 'true');
+        document.getElementById('login-gate').style.display = 'none';
+        document.getElementById('app-container').style.display = 'block';
+    } else {
+        document.getElementById('login-error').style.display = 'block';
+        document.getElementById('login-password').value = '';
+        document.getElementById('login-password').focus();
+    }
+});
+
+document.getElementById('login-password').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') document.getElementById('login-btn').click();
+});
+
 /**
  * AQUASHIELD · Label Inspect v3.1
  * Motor de auditoría 100% client-side

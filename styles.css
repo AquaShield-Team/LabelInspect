@@ -1,3 +1,79 @@
+/* -- Login Gate ------------------------------------------------- */
+.login-gate {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #0a0e1a 0%, #0d1b2a 40%, #1b2838 100%);
+}
+
+.login-box {
+    text-align: center;
+    padding: 48px 40px;
+    background: rgba(26, 32, 53, 0.85);
+    border: 1px solid rgba(59,130,246,0.2);
+    border-radius: 20px;
+    backdrop-filter: blur(20px);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 80px rgba(59,130,246,0.08);
+    max-width: 420px;
+    width: 90%;
+    animation: loginFadeIn 0.6s ease;
+}
+
+@keyframes loginFadeIn {
+    from { opacity: 0; transform: translateY(20px) scale(0.97); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.login-icon { font-size: 3.5rem; margin-bottom: 12px; filter: drop-shadow(0 0 20px rgba(59,130,246,0.4)); }
+.login-title { font-size: 2rem; font-weight: 800; color: #e0f0ff; letter-spacing: 1px; margin-bottom: 4px; }
+.login-subtitle { color: #7aadcf; font-size: 0.95rem; font-weight: 400; margin-bottom: 32px; }
+.login-form { display: flex; flex-direction: column; gap: 12px; }
+
+.login-input {
+    padding: 14px 18px;
+    background: rgba(10, 14, 26, 0.6);
+    border: 1px solid rgba(59,130,246,0.3);
+    border-radius: 10px;
+    color: #e0f0ff;
+    font-family: inherit;
+    font-size: 1rem;
+    text-align: center;
+    letter-spacing: 2px;
+    outline: none;
+    transition: all 0.3s ease;
+}
+
+.login-input:focus { border-color: #3b82f6; box-shadow: 0 0 20px rgba(59,130,246,0.2); }
+.login-input::placeholder { color: #5f89b0; letter-spacing: 0; }
+
+.login-btn {
+    padding: 14px 32px;
+    background: linear-gradient(135deg, #1565c0, #0d47a1);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    font-family: inherit;
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.login-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(21,101,192,0.4); }
+
+.login-error { color: #ef4444; font-size: 0.85rem; font-weight: 600; margin-top: 12px; animation: shake 0.4s ease; }
+
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    20%, 60% { transform: translateX(-6px); }
+    40%, 80% { transform: translateX(6px); }
+}
+
+.login-footer { color: #5f89b0; font-size: 0.78rem; margin-top: 24px; }
+.login-gate.hidden { display: none; }
 /* ── Reset & Base ──────────────────────────────────────────────── */
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
