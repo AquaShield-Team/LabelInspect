@@ -1,70 +1,91 @@
-# 🚢 AQUASHIELD · Label Inspect v3.1
+# 🚢 AQUASHIELD · Label Inspect v4.0
 
-**Auditoría automática de etiquetas de exportación** — Herramienta offline que cruza el RDD (Requerimiento de Datos para Despacho) contra las evidencias de etiquetas para verificar el cumplimiento documental.
+**Auditoría automática de etiquetas de exportación** — Herramienta que cruza el RDD contra las evidencias de etiquetas para verificar el cumplimiento documental. Ahora con **OpenCV** para pre-procesamiento de imágenes y **detección de códigos de barras**.
+
+---
+
+## 🌐 Acceso Rápido (SIN instalar nada)
+
+**👉 [Abrir Label Inspect](https://aquashield-team.github.io/LabelInspect/) 👈**
+
+Solo abre el enlace en cualquier navegador. Funciona inmediatamente, sin instalar nada.
+
+> ⚠️ La versión web funciona con OCR básico (Tesseract.js). Para OpenCV + detección de barcodes, usa el launcher local.
 
 ---
 
 ## ✨ Funcionalidades
 
-| Feature | Descripción |
-|---|---|
-| 📂 **Dropzone Único** | Arrastra todos los archivos (RDD + evidencias). El sistema auto-detecta el maestro |
-| 🔍 **Motor OCR** | Extrae texto de PDFs nativos y escaneados usando Tesseract.js (100% offline) |
-| 🧠 **Cerebro** | Mapeo persistente SERNAP → Planta correcta. Corrige automáticamente el RDD |
-| 📊 **Historial** | Guarda un resumen de cada auditoría para seguimiento de tendencias |
-| ⚠️ **Validación de Fechas** | Compara fecha del RDD vs etiqueta, marca discrepancias |
-| 📄 **Desglose por Evidencia** | Muestra cuántos lotes encontró cada archivo |
-| ⬇️ **Excel Unificado** | Un solo archivo con 3 hojas: RDD Corregido, Auditoría Completa, Faltantes |
-| ✉️ **Borrador de Correo** | Genera email profesional con el resumen de la auditoría |
-| 🖨️ **Vista de Impresión** | CSS optimizado para imprimir directamente desde el navegador |
-| ⌨️ **Atajos** | `Ctrl+Enter` = Auditar · `Esc` = Cerrar modales |
+| Feature | Web | Local |
+|---|:---:|:---:|
+| 📂 **Dropzone Único** — Auto-detecta maestro RDD | ✅ | ✅ |
+| 🔍 **OCR** — Extrae texto de PDFs escaneados | ✅ | ✅ |
+| 🧠 **Cerebro** — Mapeo SERNAP → Planta | ✅ | ✅ |
+| 📊 **Historial** — Seguimiento de auditorías | ✅ | ✅ |
+| ⬇️ **Excel Unificado** — RDD + Auditoría + Faltantes | ✅ | ✅ |
+| ✉️ **Borrador de Correo** | ✅ | ✅ |
+| 🔬 **OpenCV** — Pre-procesamiento avanzado de imágenes | ❌ | ✅ |
+| 📊 **Barcode** — Lectura directa de códigos de barras | ❌ | ✅ |
+| 📱 **QR** — Genera QR de verificación de auditoría | ❌ | ✅ |
+
+---
 
 ## 🚀 Inicio Rápido
 
-### Opción 1: Doble clic (Windows)
-```
-Abrir Label Inspect.bat
-```
-Esto inicia un servidor local en `http://localhost:8085` y abre la app automáticamente.
+### Opción 1: Web (recomendada para el equipo)
+1. Abre **https://aquashield-team.github.io/LabelInspect/**
+2. Ingresa la clave de acceso
+3. Arrastra archivos y audita
 
-### Opción 2: Cualquier servidor HTTP local
-```bash
-# Python
-python -m http.server 8085
+### Opción 2: Local con OpenCV (requiere Python)
+1. Descarga el ZIP desde GitHub → "Code" → "Download ZIP"
+2. Extrae la carpeta
+3. Doble clic en **`Abrir Label Inspect.bat`**
+4. Se abre automáticamente en `http://localhost:8085`
 
-# VS Code
-# Instalar extensión "Live Server" → click derecho en index.html → Open with Live Server
-```
+> El launcher detecta automáticamente si puede iniciar el modo completo (Flask + OpenCV). Si no puede (sin Python o firewall bloqueando), inicia en modo básico automáticamente.
 
-> ⚠️ **Importante**: La app necesita un servidor HTTP local para que el OCR (Tesseract.js) funcione. No abrir `index.html` directamente como archivo.
+---
 
 ## 📁 Estructura
 
 ```
 LabelInspect/
-├── index.html          → Interfaz principal
-├── styles.css          → Estilos (dark mode, glassmorphism)
-├── app.js              → Motor de auditoría (937 líneas)
-├── lib/                → Tesseract.js offline
+├── index.html              → Interfaz principal
+├── styles.css              → Estilos (dark mode, glassmorphism)
+├── app.js                  → Motor de auditoría híbrido
+├── lib/                    → Tesseract.js offline
 │   ├── tesseract.min.js
 │   ├── worker.min.js
 │   ├── tesseract-core-simd.wasm.js
 │   └── eng.traineddata.gz
-└── Abrir Label Inspect.bat  → Lanzador Windows
+├── server/                 → Backend Python (OpenCV + Barcode + QR)
+│   ├── app.py              → Flask API
+│   ├── image_processor.py  → Pipeline OpenCV (7 etapas)
+│   ├── barcode_reader.py   → Detector de códigos de barras
+│   ├── qr_generator.py     → Generador QR de verificación
+│   └── requirements.txt    → Dependencias Python
+└── Abrir Label Inspect.bat → Lanzador Windows
 ```
 
 ## 🛠️ Stack
 
-- **HTML5 / CSS3 / JavaScript ES6+** — Zero dependencies, zero build step
-- **[SheetJS](https://sheetjs.com/)** — Lectura/escritura de Excel
-- **[PDF.js](https://mozilla.github.io/pdf.js/)** — Extracción de texto nativo de PDFs
-- **[Tesseract.js](https://tesseract.projectnaptha.com/)** — OCR local offline
-- **[Mammoth.js](https://github.com/mwilliamson/mammoth.js)** — Extracción de texto Word
-- **localStorage** — Persistencia del Cerebro e Historial
+**Frontend (siempre disponible):**
+- HTML5 / CSS3 / JavaScript ES6+
+- [SheetJS](https://sheetjs.com/) — Lectura/escritura de Excel
+- [PDF.js](https://mozilla.github.io/pdf.js/) — Extracción de texto de PDFs
+- [Tesseract.js](https://tesseract.projectnaptha.com/) — OCR local
+- [Mammoth.js](https://github.com/mwilliamson/mammoth.js) — Extracción Word
+
+**Backend (modo local):**
+- [Flask](https://flask.palletsprojects.com/) — API REST
+- [OpenCV](https://opencv.org/) — Pre-procesamiento de imágenes
+- [pyzbar](https://github.com/NaturalHistoryMuseum/pyzbar) — Lectura de barcodes
+- [qrcode](https://github.com/lincolnloop/python-qrcode) — Generación QR
 
 ## 📋 Cómo Usar
 
-1. **Ejecuta** `Abrir Label Inspect.bat`
+1. **Abre** la app (web o launcher)
 2. **Arrastra** el archivo RDD (.xlsx) y las evidencias (PDF/Word/Excel) al dropzone
 3. **Click** en 🚀 Ejecutar Auditoría (o `Ctrl+Enter`)
 4. **Revisa** los resultados: métricas, desglose por planta, tabla de faltantes
@@ -75,18 +96,12 @@ LabelInspect/
 - Los datos persisten en el navegador (localStorage)
 - Usa **Exportar/Importar** para respaldo y compartir configuración entre equipos
 
-## 📸 Preview
-
-La interfaz usa un diseño dark mode con glassmorphism, métricas animadas e indicadores por color:
-- **🟢 Verde** = Verificado
-- **🔴 Rojo** = Faltante (con animación de pulso)
-- **🟡 Amarillo** = Advertencia de fecha
-
 ## 🔒 Privacidad
 
-- **100% offline** — No envía datos a internet
-- Todos los archivos se procesan localmente en el navegador
+- **100% local** — No envía datos a internet
+- Todos los archivos se procesan en el navegador del usuario
 - El OCR se ejecuta usando WebAssembly, no servicios cloud
+- El backend OpenCV (si se usa) corre en localhost
 
 ---
 
