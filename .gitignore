@@ -1,8 +1,8 @@
-# ── Python legacy (ya no se usa, la app es 100% web) ──
+# ── Python legacy (versión Streamlit original) ──
 app.py
 main.py
 src/
-requirements.txt
+/requirements.txt
 __pycache__/
 *.pyc
 venv/

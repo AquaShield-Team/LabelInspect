@@ -43,13 +43,37 @@ document.getElementById('login-password').addEventListener('keydown', (e) => {
 });
 
 /**
- * AQUASHIELD · Label Inspect v3.2
- * Motor de auditoría 100% client-side
- * Dropzone único · Cerebro SERNAP→Planta · Historial · Validación de fechas
+ * AQUASHIELD · Label Inspect v4.0
+ * Motor de auditoría híbrido: client-side + backend OpenCV/Barcode
+ * Dropzone único · Cerebro SERNAP→Planta · Historial · OpenCV · Barcode · QR
  */
 
 pdfjsLib.GlobalWorkerOptions.workerSrc =
     'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+// ── Backend Detection ─────────────────────────────────────────────────────────
+let backendAvailable = false;
+let backendCapabilities = [];
+
+async function detectBackend() {
+    try {
+        const res = await fetch('/api/health', { signal: AbortSignal.timeout(2000) });
+        if (res.ok) {
+            const data = await res.json();
+            backendAvailable = true;
+            backendCapabilities = data.capabilities || [];
+            console.log(`[BACKEND] ✅ v${data.version} — OpenCV ${data.opencv}`);
+            const badge = document.getElementById('backend-badge');
+            if (badge) { badge.style.display = 'inline-flex'; badge.title = `OpenCV ${data.opencv}`; }
+            const qrBtn = document.getElementById('btn-qr');
+            if (qrBtn) qrBtn.style.display = 'inline-flex';
+        }
+    } catch (e) {
+        backendAvailable = false;
+        console.log('[BACKEND] ⚠️ No disponible — modo standalone (Tesseract.js)');
+    }
+}
+detectBackend();
 
 // ── State ─────────────────────────────────────────────────────────────────────
 let rddFile = null;
@@ -483,6 +507,21 @@ async function extraerEtiquetas(files, lotesConocidos) {
                 lotesEncontrados.add(lote);
             }
 
+            // A.5) Barcodes detectados por backend (inyectados como BARCODE_TYPE: data)
+            const barcodeRegex = [...texto.matchAll(/BARCODE_\w+:\s*([\d]{6,12})/g)];
+            for (const bc of barcodeRegex) {
+                const lote = bc[1].trim();
+                if (!lotesEncontrados.has(lote)) {
+                    const fechaCercana = buscarFechaCercana(texto, lote);
+                    resultados.push({
+                        Lote: lote,
+                        Fecha_Etiqueta: fechaCercana || 'Detectado por barcode',
+                        Origen: file.name + ' [BC]'
+                    });
+                    lotesEncontrados.add(lote);
+                }
+            }
+
             // B) Búsqueda directa de lotes conocidos
             for (const loteConocido of lotesSet) {
                 if (lotesEncontrados.has(loteConocido)) continue;
@@ -514,13 +553,15 @@ function buscarFechaCercana(texto, lote) {
     return null;
 }
 
-// ── PDF: nativo + OCR ─────────────────────────────────────────────────────────
+// ── PDF: nativo + OCR (híbrido: backend OpenCV o Tesseract.js) ────────────────
 async function extractTextFromPDF(file, fileIdx, totalFiles) {
     const data = await readFileAsArrayBuffer(file);
     const pdf = await pdfjsLib.getDocument({ data }).promise;
     let fullText = '';
     let ocrWorker = null;
+    let totalBarcodes = 0;
 
+    // SIEMPRE crear Tesseract worker (se usa como fallback o para OCR de imagen procesada)
     if (typeof Tesseract !== 'undefined') {
         try {
             const baseUrl = location.href.replace(/\/[^\/]*$/, '/');
@@ -534,7 +575,8 @@ async function extractTextFromPDF(file, fileIdx, totalFiles) {
     }
 
     for (let i = 1; i <= pdf.numPages; i++) {
-        setProgress(`OCR página ${i}/${pdf.numPages} de ${file.name}…`,
+        const modeLabel = backendAvailable ? 'OpenCV+OCR' : 'OCR';
+        setProgress(`${modeLabel} página ${i}/${pdf.numPages} de ${file.name}…`,
             30 + Math.round((fileIdx / totalFiles + i / pdf.numPages / totalFiles) * 50));
 
         const page = await pdf.getPage(i);
@@ -543,22 +585,109 @@ async function extractTextFromPDF(file, fileIdx, totalFiles) {
 
         if (nativeText.trim().length > 50) {
             fullText += nativeText + '\n';
-        } else if (ocrWorker) {
+        } else {
+            // Renderizar página a canvas
             const viewport = page.getViewport({ scale: 2.5 });
             const canvas = document.createElement('canvas');
             canvas.width = viewport.width;
             canvas.height = viewport.height;
             const ctx = canvas.getContext('2d');
             await page.render({ canvasContext: ctx, viewport }).promise;
-            try {
-                const result = await ocrWorker.recognize(canvas);
-                fullText += result.data.text + '\n';
-            } catch (e) { /* skip */ }
+
+            if (backendAvailable) {
+                // ── MODO HÍBRIDO: OpenCV pre-procesa + Tesseract.js lee ──
+                try {
+                    const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+                    const formData = new FormData();
+                    formData.append('image', blob, `page_${i}.png`);
+
+                    const res = await fetch('/api/process-image', { method: 'POST', body: formData });
+                    const result = await res.json();
+
+                    if (result.success) {
+                        // Barcodes detectados por OpenCV
+                        if (result.barcodes && result.barcodes.length > 0) {
+                            for (const bc of result.barcodes) {
+                                fullText += `BARCODE_${bc.type}: ${bc.data}\n`;
+                                totalBarcodes++;
+                            }
+                            console.log(`[BACKEND] Pág ${i}: ${result.barcodes.length} barcode(s)`);
+                        }
+
+                        // Si el backend hizo OCR exitoso, usar ese texto
+                        if (result.ocr_text && result.ocr_text.trim().length > 20) {
+                            fullText += result.ocr_text + '\n';
+                        }
+                        // Si no, usar la imagen pre-procesada con Tesseract.js
+                        else if (result.processed_image && ocrWorker) {
+                            console.log(`[HYBRID] Pág ${i}: OpenCV pre-procesó → Tesseract.js OCR`);
+                            const imgEl = new Image();
+                            const imgLoaded = new Promise((resolve, reject) => {
+                                imgEl.onload = resolve;
+                                imgEl.onerror = reject;
+                            });
+                            imgEl.src = 'data:image/png;base64,' + result.processed_image;
+                            await imgLoaded;
+
+                            // Dibujar imagen procesada en canvas para Tesseract.js
+                            const cvs = document.createElement('canvas');
+                            cvs.width = imgEl.naturalWidth;
+                            cvs.height = imgEl.naturalHeight;
+                            cvs.getContext('2d').drawImage(imgEl, 0, 0);
+
+                            try {
+                                const ocrResult = await ocrWorker.recognize(cvs);
+                                fullText += ocrResult.data.text + '\n';
+                            } catch (e) { /* skip */ }
+                        }
+                        // Último fallback: OCR sobre canvas original
+                        else if (ocrWorker) {
+                            try {
+                                const ocrResult = await ocrWorker.recognize(canvas);
+                                fullText += ocrResult.data.text + '\n';
+                            } catch (e) { /* skip */ }
+                        }
+                    }
+                } catch (e) {
+                    console.warn(`[BACKEND] Error pág ${i}, fallback a Tesseract.js:`, e);
+                    if (ocrWorker) {
+                        try {
+                            const ocrResult = await ocrWorker.recognize(canvas);
+                            fullText += ocrResult.data.text + '\n';
+                        } catch (e2) { /* skip */ }
+                    }
+                }
+            } else if (ocrWorker) {
+                // ── MODO STANDALONE: Tesseract.js directo ──
+                try {
+                    const result = await ocrWorker.recognize(canvas);
+                    fullText += result.data.text + '\n';
+                } catch (e) { /* skip */ }
+            }
         }
     }
 
+    if (totalBarcodes > 0) console.log(`[BACKEND] Total barcodes en ${file.name}: ${totalBarcodes}`);
     if (ocrWorker) { try { await ocrWorker.terminate(); } catch (e) {} }
     return fullText;
+}
+
+async function _ocrFallback(canvas, existingWorker) {
+    let worker = existingWorker;
+    if (!worker && typeof Tesseract !== 'undefined') {
+        const baseUrl = location.href.replace(/\/[^\/]*$/, '/');
+        worker = await Tesseract.createWorker('eng', 1, {
+            workerPath: baseUrl + 'lib/worker.min.js',
+            corePath: baseUrl + 'lib/tesseract-core-simd.wasm.js',
+            langPath: baseUrl + 'lib',
+            logger: () => {}
+        });
+    }
+    if (worker) {
+        try { const r = await worker.recognize(canvas); return r.data.text; }
+        catch (e) { return ''; }
+    }
+    return '';
 }
 
 async function extractTextFromDocx(file) {
@@ -1221,5 +1350,49 @@ document.addEventListener('keydown', e => {
         // Cerrar modal de correo si existe
         const emailOverlay = document.querySelector('.modal-overlay:not(#cerebro-modal):not(#historial-modal)');
         if (emailOverlay && emailOverlay.style.display !== 'none') emailOverlay.remove();
+    }
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 12. QR DE VERIFICACIÓN
+// ═════════════════════════════════════════════════════════════════════════════
+
+document.getElementById('btn-qr')?.addEventListener('click', async () => {
+    if (!auditResults.length || !backendAvailable) return;
+
+    const total = auditResults.length;
+    const totalOK = auditResults.filter(r => r.Estado.includes('✅')).length;
+    const totalFalt = total - totalOK;
+    const pct = total > 0 ? Math.round(totalOK / total * 100) : 0;
+    const pedido = (rddFile.name.match(/\d{6,}/) || ['N/A'])[0];
+
+    try {
+        const res = await fetch('/api/generate-qr', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pedido, total, ok: totalOK, faltantes: totalFalt, pct })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            const overlay = document.createElement('div');
+            overlay.className = 'modal-overlay';
+            overlay.innerHTML = `<div class="modal-box modal-qr">
+                <h3>📱 QR de Verificación — PV ${pedido}</h3>
+                <p class="modal-desc">Escanea este código para verificar el resumen de la auditoría.</p>
+                <div class="qr-preview"><img src="${data.qr_image}" alt="QR Auditoría"></div>
+                <div class="qr-summary">
+                    <span>📦 ${total} lotes</span> · <span>✅ ${totalOK}</span> · <span>🔴 ${totalFalt}</span> · <span>📊 ${pct}%</span>
+                </div>
+                <div class="modal-actions">
+                    <a href="${data.qr_image}" download="QR_PV${pedido}.png" class="btn-modal-copy">💾 Guardar QR</a>
+                    <button class="btn-modal-close" onclick="this.closest('.modal-overlay').remove()">Cerrar</button>
+                </div>
+            </div>`;
+            overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+            document.body.appendChild(overlay);
+        }
+    } catch (e) {
+        console.error('[QR] Error:', e);
     }
 });
