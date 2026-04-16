@@ -1147,3 +1147,158 @@ html { scroll-behavior: smooth; }
     font-size: 0.95rem;
     color: var(--text-secondary);
 }
+
+/* ── Cerebro Pre-Análisis ─────────────────────────────────────────────────── */
+.cerebro-preview {
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.85), rgba(30, 41, 59, 0.75));
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(99, 102, 241, 0.2);
+    border-radius: var(--radius-lg);
+    padding: 1.1rem 1.4rem;
+    margin-bottom: 1.5rem;
+    animation: cerebroSlideIn 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255,255,255,0.05);
+}
+@keyframes cerebroSlideIn {
+    from { opacity: 0; transform: translateY(-12px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+.cerebro-preview-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-weight: 600;
+    font-size: 0.9rem;
+    letter-spacing: 0.02em;
+    color: rgba(199, 210, 254, 0.9);
+    margin-bottom: 0.9rem;
+    padding-bottom: 0.6rem;
+    border-bottom: 1px solid rgba(99, 102, 241, 0.12);
+}
+.cerebro-preview-close {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.08);
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 0.85rem;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    transition: all 0.2s;
+}
+.cerebro-preview-close:hover {
+    background: rgba(239, 68, 68, 0.2);
+    border-color: rgba(239, 68, 68, 0.3);
+    color: #f87171;
+}
+.cerebro-preview-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+}
+.cerebro-chip {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.55rem 0.9rem;
+    border-radius: 10px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: all 0.25s ease;
+    position: relative;
+    overflow: hidden;
+}
+.cerebro-chip::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    border-radius: 3px 0 0 3px;
+}
+.cerebro-chip.mapped {
+    background: rgba(34, 197, 94, 0.08);
+    border: 1px solid rgba(34, 197, 94, 0.15);
+    color: #d1fae5;
+}
+.cerebro-chip.mapped::before { background: #22c55e; }
+.cerebro-chip.mapped:hover {
+    background: rgba(34, 197, 94, 0.14);
+    box-shadow: 0 0 12px rgba(34, 197, 94, 0.15);
+}
+.cerebro-chip.unmapped {
+    background: rgba(250, 204, 21, 0.06);
+    border: 1px solid rgba(250, 204, 21, 0.15);
+    color: #fef3c7;
+    cursor: pointer;
+}
+.cerebro-chip.unmapped::before { background: #eab308; }
+.cerebro-chip.unmapped:hover {
+    background: rgba(250, 204, 21, 0.14);
+    box-shadow: 0 0 12px rgba(250, 204, 21, 0.15);
+    transform: translateX(3px);
+}
+.cerebro-chip-icon {
+    font-size: 0.75rem;
+    min-width: 18px;
+    text-align: center;
+}
+.cerebro-chip-sernap {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.78rem;
+    font-weight: 700;
+    background: rgba(255,255,255,0.08);
+    padding: 0.15rem 0.5rem;
+    border-radius: 5px;
+    letter-spacing: 0.04em;
+    min-width: 52px;
+    text-align: center;
+}
+.cerebro-chip.mapped .cerebro-chip-sernap { color: #86efac; }
+.cerebro-chip.unmapped .cerebro-chip-sernap { color: #fde68a; }
+.cerebro-chip-arrow {
+    opacity: 0.3;
+    font-size: 0.75rem;
+}
+.cerebro-chip-planta {
+    font-weight: 600;
+    flex: 1;
+    font-size: 0.84rem;
+}
+.cerebro-chip.unmapped .cerebro-chip-planta::after {
+    content: '  ← click para editar';
+    font-size: 0.7rem;
+    font-weight: 400;
+    opacity: 0;
+    color: #fde68a;
+    transition: opacity 0.2s;
+}
+.cerebro-chip.unmapped:hover .cerebro-chip-planta::after { opacity: 0.7; }
+.cerebro-preview-summary {
+    width: 100%;
+    margin-top: 0.6rem;
+    padding-top: 0.6rem;
+    border-top: 1px solid rgba(255,255,255,0.05);
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+/* Original name vs Cerebro correction */
+.cerebro-original {
+    text-decoration: line-through;
+    opacity: 0.5;
+    font-weight: 400;
+    font-size: 0.78rem;
+}
+.cerebro-corrected {
+    color: #86efac;
+    font-weight: 700;
+    font-size: 0.84rem;
+}

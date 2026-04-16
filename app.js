@@ -168,6 +168,85 @@ function classifyFiles(fileList) {
     allFilenamesEl.innerHTML = summary;
     dropAll.classList.add('file-loaded');
     btnAuditar.disabled = !rddFile;
+
+    // Pre-scan del RDD: mostrar plantas inmediatamente
+    if (rddFile) quickScanRDD(rddFile);
+}
+
+/**
+ * Lee rápidamente el RDD para extraer SERNAP/Planta y mostrar el panel Cerebro.
+ * Usa detectColumn() para resolver ambigüedad entre columnas similares.
+ */
+async function quickScanRDD(file) {
+    try {
+        const data = await readFileAsArrayBuffer(file);
+        const wb = XLSX.read(data, { type: 'array', cellDates: true });
+
+        // Buscar la hoja con más datos (la hoja principal del RDD)
+        let sheetName = wb.SheetNames[0];
+        let maxRows = 0;
+        for (const name of wb.SheetNames) {
+            const r = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1 });
+            if (r.length > maxRows) { maxRows = r.length; sheetName = name; }
+        }
+        console.log(`[QUICK-SCAN] Hoja seleccionada: "${sheetName}" (${maxRows} filas)`);
+        const ws = wb.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: false });
+
+        // Encontrar header
+        let headerIdx = 0;
+        for (let i = 0; i < Math.min(10, rows.length); i++) {
+            if (rows[i] && rows[i].some(c => String(c||'').toLowerCase().includes('planta'))) {
+                headerIdx = i; break;
+            }
+        }
+        const rawHeaders = (rows[headerIdx] || []).map(h => String(h||'').trim());
+        
+        // Usar detectColumn (misma lógica que procesarRDD) para resolver ambigüedad
+        const colPlanta = detectColumn(rawHeaders, ['planta elaboradora', 'elaboradora', 'planta', 'centro']);
+        const colSernap = detectColumn(rawHeaders, ['sernap planta', 'sernap']);
+
+        const pIdx = colPlanta != null ? rawHeaders.indexOf(colPlanta) : -1;
+        const sIdx = colSernap != null ? rawHeaders.indexOf(colSernap) : -1;
+
+        console.log(`[QUICK-SCAN] Headers:`, rawHeaders.filter(h => h).join(' | '));
+        console.log(`[QUICK-SCAN] Planta col: "${colPlanta}" (idx=${pIdx}), SERNAP col: "${colSernap}" (idx=${sIdx})`);
+
+        // Si ambos apuntan a la misma columna, buscar la siguiente columna con "planta"
+        if (pIdx >= 0 && pIdx === sIdx) {
+            const altIdx = rawHeaders.findIndex((h, i) => 
+                i !== sIdx && h.toLowerCase().includes('planta') && !h.toLowerCase().startsWith('sernap')
+            );
+            if (altIdx >= 0) {
+                // Usar la columna alternativa para planta
+                const fixedPIdx = altIdx;
+                return quickScanExtract(rows, headerIdx, fixedPIdx, sIdx, file.name);
+            }
+        }
+
+        if (pIdx < 0 && sIdx < 0) return;
+        quickScanExtract(rows, headerIdx, pIdx, sIdx, file.name);
+    } catch (e) {
+        console.warn('[QUICK-SCAN] Error:', e);
+    }
+}
+
+function quickScanExtract(rows, headerIdx, pIdx, sIdx, fileName) {
+    const plantasBySernap = {};
+    let lastPlanta = '', lastSernap = '';
+    for (let i = headerIdx + 1; i < rows.length; i++) {
+        const row = rows[i];
+        if (!row) continue;
+        if (pIdx >= 0 && row[pIdx] && String(row[pIdx]).trim()) lastPlanta = String(row[pIdx]).trim();
+        if (sIdx >= 0 && row[sIdx] && String(row[sIdx]).trim()) lastSernap = String(row[sIdx]).replace(/\.0+$/, '').trim();
+        if (lastSernap && !plantasBySernap[lastSernap]) {
+            plantasBySernap[lastSernap] = lastPlanta;
+        }
+    }
+
+    const cerebro = getCerebro();
+    showCerebroPreview(plantasBySernap, cerebro);
+    console.log(`[QUICK-SCAN] ${Object.keys(plantasBySernap).length} plantas en ${fileName}`, plantasBySernap);
 }
 
 // ── Mode Tabs ─────────────────────────────────────────────────────────────────
@@ -209,6 +288,9 @@ function handleRddOnly(fileList) {
     rddFilenameEl.innerHTML = '<strong>' + excel.name + '</strong>';
     dropRdd.classList.add('file-loaded');
     btnCorregir.disabled = false;
+
+    // Pre-scan: mostrar plantas inmediatamente
+    quickScanRDD(excel);
 }
 
 btnCorregir.addEventListener('click', async () => {
@@ -228,30 +310,52 @@ btnCorregir.addEventListener('click', async () => {
         const tablaSheet = buildTablaFromWorkbook(workbook, cerebro);
         XLSX.utils.book_append_sheet(wb, tablaSheet, 'Tabla');
 
-        // Hoja 2: RDD Corregido (Sheet1 / hoja con mas datos)
-        let dataSheetName = workbook.SheetNames.find(n => n.toLowerCase() !== 'hoja1') || workbook.SheetNames[0];
+        // Hoja 2: RDD Corregido (hoja con más datos)
+        let dataSheetName = workbook.SheetNames[0];
+        let maxR = 0;
+        for (const nm of workbook.SheetNames) {
+            const r = XLSX.utils.sheet_to_json(workbook.Sheets[nm], { header: 1 });
+            if (r.length > maxR) { maxR = r.length; dataSheetName = nm; }
+        }
+        console.log(`[CORREGIR] Hoja: "${dataSheetName}" (${maxR} filas)`);
         const wsCopy = workbook.Sheets[dataSheetName];
         const allRows = XLSX.utils.sheet_to_json(wsCopy, { header: 1, defval: null, raw: false });
         
-        // Find planta/sernap columns in data sheet
+        // Find planta/sernap columns usando detectColumn
         let headerRowIdx = 0;
         for (let i = 0; i < Math.min(10, allRows.length); i++) {
             const row = allRows[i];
             if (row && row.some(c => String(c || '').toLowerCase().includes('planta'))) { headerRowIdx = i; break; }
         }
-        const headers = allRows[headerRowIdx] ? allRows[headerRowIdx].map(h => String(h || '').trim().toLowerCase()) : [];
-        const pIdx = headers.findIndex(h => h.includes('planta') || h.includes('centro'));
-        const sIdx = headers.findIndex(h => h.includes('sernap'));
+        const rawHdrs = allRows[headerRowIdx] ? allRows[headerRowIdx].map(h => String(h || '').trim()) : [];
+        const colP = detectColumn(rawHdrs, ['planta elaboradora', 'elaboradora', 'planta', 'centro']);
+        const colS = detectColumn(rawHdrs, ['sernap planta', 'sernap']);
+        let pIdx = colP != null ? rawHdrs.indexOf(colP) : -1;
+        let sIdx = colS != null ? rawHdrs.indexOf(colS) : -1;
+        
+        // Desambiguar si ambos apuntan a la misma columna
+        if (pIdx >= 0 && pIdx === sIdx) {
+            const altIdx = rawHdrs.findIndex((h, i) => 
+                i !== sIdx && h.toLowerCase().includes('planta') && !h.toLowerCase().startsWith('sernap')
+            );
+            if (altIdx >= 0) pIdx = altIdx;
+        }
+        console.log(`[CORREGIR] Planta col: "${colP}" (idx=${pIdx}), SERNAP col: "${colS}" (idx=${sIdx})`);
         
         if (pIdx >= 0 && sIdx >= 0 && Object.keys(cerebro).length > 0) {
             let lastS = '';
+            let corrections = 0;
             for (let i = headerRowIdx + 1; i < allRows.length; i++) {
                 const row = allRows[i];
                 if (!row) continue;
                 const rawS = row[sIdx];
                 if (rawS != null && String(rawS).trim()) lastS = String(rawS).replace(/\.0+$/, '').trim();
-                if (lastS && cerebro[lastS]) row[pIdx] = cerebro[lastS];
+                if (lastS && cerebro[lastS]) { 
+                    row[pIdx] = cerebro[lastS]; 
+                    corrections++;
+                }
             }
+            console.log(`[CORREGIR] ${corrections} celdas corregidas por Cerebro`);
         }
         XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(allRows), 'RDD Corregido');
 
@@ -395,10 +499,13 @@ async function procesarRDD(file) {
 
     // Cerebro: cargar correcciones
     const cerebro = getCerebro();
+    const cerebroKeys = Object.keys(cerebro);
+    console.log(`[CEREBRO] ${cerebroKeys.length} entradas:`, cerebroKeys.length > 0 ? cerebro : '(vacío)');
 
     let lastPlanta = '', lastSernap = '', lastDesc = '';
     const lotes = [];
     const seenKeys = {};
+    let cerebroMatches = 0;
 
     for (const row of rddDataRows) {
         const loteRaw = row[colIdxMap['Lote']];
@@ -429,6 +536,7 @@ async function procesarRDD(file) {
         const sernapClean = lastSernap.replace(/\.0+$/, '');
         if (cerebro[sernapClean]) {
             plantaFinal = cerebro[sernapClean];
+            cerebroMatches++;
         }
 
         seenKeys[compositeKey] = true;
@@ -438,8 +546,93 @@ async function procesarRDD(file) {
         });
     }
 
+    const uniqueSernaps = [...new Set(lotes.map(l => l.SERNAP))].filter(Boolean);
     console.log(`[RDD] Lotes únicos: ${lotes.length}`);
+    console.log(`[CEREBRO] SERNAPs en RDD: [${uniqueSernaps.join(', ')}]`);
+    console.log(`[CEREBRO] Correcciones aplicadas: ${cerebroMatches}/${lotes.length} lotes`);
+    if (cerebroKeys.length > 0 && cerebroMatches === 0) {
+        console.warn(`[CEREBRO] ⚠️ 0 matches. Claves del cerebro: [${cerebroKeys.join(', ')}] vs SERNAPs del RDD: [${uniqueSernaps.join(', ')}]`);
+    }
+
+    // Mostrar pre-análisis visual del Cerebro
+    const plantasBySernap = {};
+    for (const l of lotes) {
+        if (l.SERNAP && !plantasBySernap[l.SERNAP]) {
+            plantasBySernap[l.SERNAP] = l.Planta;
+        }
+    }
+    showCerebroPreview(plantasBySernap, cerebro);
+
     return lotes;
+}
+
+/**
+ * Muestra el panel visual de pre-análisis del Cerebro.
+ * Verde = SERNAP mapeado en Cerebro. Amarillo = sin mapear (click para agregar).
+ */
+function showCerebroPreview(plantasBySernap, cerebro) {
+    const container = document.getElementById('cerebro-preview');
+    const body = document.getElementById('cerebro-preview-body');
+    if (!container || !body) return;
+
+    const entries = Object.entries(plantasBySernap);
+    if (entries.length === 0) { container.style.display = 'none'; return; }
+
+    let mapped = 0, unmapped = 0;
+    let html = '';
+
+    for (const [sernap, plantaOriginal] of entries) {
+        const cerebroPlanta = cerebro[sernap];
+        if (cerebroPlanta) {
+            mapped++;
+            const changed = plantaOriginal !== cerebroPlanta;
+            html += `<div class="cerebro-chip mapped" title="Cerebro: ${plantaOriginal} → ${cerebroPlanta}">
+                <span class="cerebro-chip-icon">✅</span>
+                <span class="cerebro-chip-sernap">${sernap}</span>
+                <span class="cerebro-chip-arrow">→</span>
+                <span class="cerebro-chip-planta">${changed 
+                    ? `<span class="cerebro-original">${plantaOriginal}</span> <span class="cerebro-corrected">/ ${cerebroPlanta}</span>` 
+                    : cerebroPlanta}</span>
+            </div>`;
+        } else {
+            unmapped++;
+            html += `<div class="cerebro-chip unmapped" title="Click para agregar al Cerebro" 
+                     data-sernap="${sernap}" data-planta="${plantaOriginal}">
+                <span class="cerebro-chip-icon">⚠️</span>
+                <span class="cerebro-chip-sernap">${sernap}</span>
+                <span class="cerebro-chip-arrow">→</span>
+                <span class="cerebro-chip-planta">${plantaOriginal}</span>
+            </div>`;
+        }
+    }
+
+    // Resumen
+    html += `<div class="cerebro-preview-summary">`;
+    if (mapped > 0) html += `✅ ${mapped} planta(s) con corrección del Cerebro. `;
+    if (unmapped > 0) html += `⚠️ ${unmapped} sin mapear — click en amarillo para agregar.`;
+    if (mapped > 0 && unmapped === 0) html += `Todas las plantas están mapeadas.`;
+    html += `</div>`;
+
+    body.innerHTML = html;
+    container.style.display = 'block';
+
+    // Click en chips amarillos → abrir modal Cerebro con datos pre-llenados
+    body.querySelectorAll('.cerebro-chip.unmapped').forEach(chip => {
+        chip.addEventListener('click', () => {
+            const sernap = chip.dataset.sernap;
+            const planta = chip.dataset.planta;
+            document.getElementById('cerebro-sernap').value = sernap;
+            document.getElementById('cerebro-planta').value = planta;
+            document.getElementById('cerebro-modal').style.display = 'flex';
+            document.getElementById('cerebro-planta').focus();
+            document.getElementById('cerebro-planta').select();
+        });
+    });
+
+    // Botón cerrar
+    document.getElementById('cerebro-preview-close').onclick = () => {
+        container.style.display = 'none';
+    };
 }
 
 const MESES = { jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
