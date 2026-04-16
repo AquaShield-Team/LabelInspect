@@ -723,12 +723,13 @@ function cruzarDatos(lotesRequeridos, etiquetas) {
     return lotesRequeridos.map(req => {
         const match = (etiqByLote[req.Lote] || [])[0] || null;
         let fechaWarn = '';
-        if (match && match.Fecha_Etiqueta && req.Fecha) {
-            // Comparar fechas si ambas existen y tienen formato numérico
-            const fRDD = req.Fecha.replace(/\D/g, '');
-            const fEtiq = match.Fecha_Etiqueta.replace(/\D/g, '');
-            if (fRDD.length >= 6 && fEtiq.length >= 6 && fRDD !== fEtiq) {
+        if (match && match.Fecha_Etiqueta && req.Fecha_Caducidad) {
+            // Comparar CADUCIDAD del RDD vs Fecha de Etiqueta
+            const fRDD = _canonicalDate(req.Fecha_Caducidad);
+            const fEtiq = _canonicalDate(match.Fecha_Etiqueta);
+            if (fRDD && fEtiq && fRDD !== fEtiq) {
                 fechaWarn = '⚠️';
+                console.log(`[FECHA] Discrepancia: RDD="${req.Fecha_Caducidad}"→${fRDD} vs Etiq="${match.Fecha_Etiqueta}"→${fEtiq}`);
             }
         }
         return {
@@ -739,6 +740,36 @@ function cruzarDatos(lotesRequeridos, etiquetas) {
             Estado: match ? '✅ OK' : '🔴 FALTANTE'
         };
     });
+}
+
+/**
+ * Normaliza cualquier formato de fecha a YYYYMMDD para comparación confiable.
+ * Soporta: DD.MM.YYYY, DD/MM/YYYY, DD-MM-YYYY, DD-MMM-YYYY, YYYY-MM-DD
+ */
+function _canonicalDate(str) {
+    if (!str) return '';
+    // Limpiar caracteres invisibles, ⚠️, espacios extra
+    const s = String(str).replace(/[⚠️\u200B\u00A0]/g, '').trim();
+    if (!s) return '';
+
+    // Formato: DD.MM.YYYY o DD/MM/YYYY o DD-MM-YYYY
+    const m1 = s.match(/^(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{4})$/);
+    if (m1) return m1[3] + m1[2].padStart(2, '0') + m1[1].padStart(2, '0');
+
+    // Formato: DD-MMM-YYYY o DD.MMM.YYYY (ej: 23-Feb-2028)
+    const m2 = s.match(/^(\d{1,2})[.\/-]([A-Za-z]{3})[.\/-](\d{4})$/);
+    if (m2) {
+        const mes = MESES[m2[2].toLowerCase()] || '00';
+        return m2[3] + mes + m2[1].padStart(2, '0');
+    }
+
+    // Formato: YYYY-MM-DD (ISO)
+    const m3 = s.match(/^(\d{4})[.\/-](\d{1,2})[.\/-](\d{1,2})$/);
+    if (m3) return m3[1] + m3[2].padStart(2, '0') + m3[3].padStart(2, '0');
+
+    // Solo dígitos (ya normalizado)
+    const digits = s.replace(/\D/g, '');
+    return digits.length >= 8 ? digits.substring(0, 8) : '';
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
